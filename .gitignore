@@ -1,0 +1,5 @@
+bin/
+build/
+
+*.pro.user
+*.pro.user.*
