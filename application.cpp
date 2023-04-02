@@ -34,5 +34,12 @@ void Application::Run()
                  std::cout << "Button " << i << " hold" << std::endl;
             }
         }
+        for (int i = 0; i < SDL_CONTROLLER_AXIS_MAX; i++) {
+            if (!gamepad->IsAxisMotion(static_cast<SDL_GameControllerAxis>(i))) {
+                continue;
+            }
+            auto axisValue = gamepad->GetAxisValue(static_cast<SDL_GameControllerAxis>(i));
+            std::cout << "Axis value for " << i << " = " << axisValue << std::endl;
+        }
     }
 }
