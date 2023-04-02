@@ -11,6 +11,13 @@ INCLUDEPATH += $${SDL2_PATH}\include
 LIBS += -L$${SDL2_PATH}\lib\x64 -lSDL2 -lSDL2main
 
 SOURCES += \
-    main.cpp
+    gamepad.cpp \
+    main.cpp \
+    application.cpp
+
+
+HEADERS += \
+    application.h \
+    gamepad.h
 
 DESTDIR = $${_PRO_FILE_PWD_}/bin
