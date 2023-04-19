@@ -5,7 +5,7 @@
 
 #include "gamepad.h"
 
-#include <SDL.h>
+#include "SDL2/SDL.h"
 #undef main
 
 class Application

@@ -1,6 +1,6 @@
 #pragma once
 
-#include <SDL.h>
+#include <SDL2/SDL.h>
 #include <vector>
 #include <iostream>
 #include <algorithm>
@@ -31,7 +31,7 @@ public:
 
 private:
     const int HOLD_THRESHOLD_MS = 300;
-    const float DEADZONE = 0.1f;
+    const float DEADZONE = 0.2f;
 
     Gamepad(SDL_GameController*);
     int GetKeyHoldTime(SDL_GameControllerButton);

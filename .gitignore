@@ -3,3 +3,7 @@ build/
 
 *.pro.user
 *.pro.user.*
+
+.qmake.stash
+
+Makefile*
