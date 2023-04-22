@@ -5,16 +5,20 @@
 #include <iostream>
 #include <algorithm>
 
-struct KeyState
+struct KeyInfo
 {
-    bool CurrentState;
-    bool PreviousState;
-    int PressedTimeInMilliseconds;
+    bool IsPressed;
+    SDL_GameControllerButton Button;
 };
 
-struct AxisState {
-    bool CurrentState;
-    float Value;
+// Adapted from SDL - see SDL_GameControllerAxis(https://wiki.libsdl.org/SDL2/SDL_GameControllerAxis)
+enum class Axis
+{
+    LeftStickHorizontal,
+    LeftStickVertical,
+    RightStickHorizontal,
+    RightStickVertical,
+    Count
 };
 
 class Gamepad
@@ -23,20 +27,24 @@ public:
     static Gamepad* Open();
     ~Gamepad();
 
-    void Update(SDL_Event&);
-    bool IsKeyHeldDown(SDL_GameControllerButton);
-    bool WasKeyClicked(SDL_GameControllerButton);
-    bool IsAxisMotion(SDL_GameControllerAxis);
-    float GetAxisValue(SDL_GameControllerAxis);
+    void Update(SDL_Event& event);
+    const std::vector<KeyInfo>& GetKeys();
+    const std::vector<double>& GetAxes();
+    std::vector<KeyInfo>& GetKeyEvents();
+    double GetValueForAxis(Axis axis) {
+        return axes[(int)axis];
+    }
 
 private:
     const int HOLD_THRESHOLD_MS = 300;
     const float DEADZONE = 0.2f;
 
     Gamepad(SDL_GameController*);
-    int GetKeyHoldTime(SDL_GameControllerButton);
+
+    void InitializeKeys();
 
     SDL_GameController* gameController;
-    std::vector<KeyState> keys;
-    std::vector<AxisState> axes;
+    std::vector<KeyInfo> keys;
+    std::vector<double> axes;
+    std::vector<KeyInfo> keyInfoQueue;
 };

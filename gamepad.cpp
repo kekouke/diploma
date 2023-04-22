@@ -13,8 +13,18 @@ Gamepad* Gamepad::Open()
 Gamepad::Gamepad(SDL_GameController* controller)
 {
     gameController = controller;
-    keys = std::vector<KeyState>(SDL_CONTROLLER_BUTTON_MAX);
-    axes = std::vector<AxisState>(SDL_CONTROLLER_AXIS_MAX);
+    keys = std::vector<KeyInfo>(SDL_CONTROLLER_BUTTON_MAX);
+    axes = std::vector<double>(SDL_CONTROLLER_AXIS_MAX);
+
+    InitializeKeys();
+}
+
+void Gamepad::InitializeKeys()
+{
+    int i = 0;
+    for (auto& key : keys) {
+        key.Button = SDL_GameControllerButton(i++);
+    }
 }
 
 Gamepad::~Gamepad()
@@ -30,28 +40,22 @@ void Gamepad::Update(SDL_Event& event)
     while (SDL_PollEvent(&event)) {
         switch (event.type) {
             case SDL_CONTROLLERBUTTONDOWN: {
+                keyInfoQueue.push_back(KeyInfo{true, SDL_GameControllerButton(event.cbutton.button)});
                 int buttonIndex = event.cbutton.button;
-                keys[buttonIndex].PressedTimeInMilliseconds = SDL_GetTicks();
                 std::cout << "Button " << buttonIndex << " pressed" << std::endl;
                 break;
             }
             case SDL_CONTROLLERBUTTONUP: {
+                keyInfoQueue.push_back(KeyInfo{false, SDL_GameControllerButton(event.cbutton.button)});
                 int buttonIndex = event.cbutton.button;
                 std::cout << "Button " << buttonIndex << " released" << std::endl;
                 break;
             }
         }
     }
-    for (int i = 0; i < SDL_CONTROLLER_BUTTON_MAX; i++) {
-        KeyState& key = keys[i];
-        key.PreviousState = key.CurrentState;
-        key.CurrentState = SDL_GameControllerGetButton(
-                    gameController,
-                    static_cast<SDL_GameControllerButton>(i)
-        );
-    }
+
     for (int i = 0; i < SDL_CONTROLLER_AXIS_MAX; i++) {
-        axes[i].Value = std::clamp(
+        axes[i] = std::clamp(
                     SDL_GameControllerGetAxis(
                        gameController,
                        static_cast<SDL_GameControllerAxis>(i)
@@ -59,33 +63,21 @@ void Gamepad::Update(SDL_Event& event)
                     -1.f,
                     1.f
         );
-        axes[i].CurrentState = abs(axes[i].Value) >= DEADZONE;
+        axes[i] = abs(axes[i]) >= DEADZONE ? axes[i] : 0.0;
     }
 }
 
-bool Gamepad::IsKeyHeldDown(SDL_GameControllerButton key)
+const std::vector<KeyInfo>& Gamepad::GetKeys()
 {
-    return keys[key].CurrentState && GetKeyHoldTime(key) >= HOLD_THRESHOLD_MS;
+    return keys;
 }
 
-bool Gamepad::WasKeyClicked(SDL_GameControllerButton key)
+const std::vector<double>& Gamepad::GetAxes()
 {
-   return !keys[key].CurrentState &&
-           keys[key].PreviousState &&
-           GetKeyHoldTime(key) < HOLD_THRESHOLD_MS;
+    return axes;
 }
 
-bool Gamepad::IsAxisMotion(SDL_GameControllerAxis axis)
+std::vector<KeyInfo> &Gamepad::GetKeyEvents()
 {
-    return axes[axis].CurrentState;
-}
-
-float Gamepad::GetAxisValue(SDL_GameControllerAxis axis)
-{
-    return axes[axis].Value;
-}
-
-int Gamepad::GetKeyHoldTime(SDL_GameControllerButton key)
-{
-    return SDL_GetTicks() - keys[key].PressedTimeInMilliseconds;
+    return keyInfoQueue;
 }
