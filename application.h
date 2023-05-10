@@ -15,7 +15,6 @@ public:
     ~Application();
 
     void Run(int argc, char *argv[]);
-    void ProcessPendingKeyEvents(ipc::Sender<Message::GamepadState>& sender);
 
 private:
     Gamepad* gamepad;

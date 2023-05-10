@@ -29,7 +29,8 @@ SOURCES += \
 HEADERS += \
     messages.h \
     application.h \
-    gamepad.h
+    gamepad.h \
+    motion.h
 
 DESTDIR = $$PWD/bin
 OBJECTS_DIR = $$PWD/build            # Путь объектников

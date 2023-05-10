@@ -13,7 +13,7 @@ Gamepad* Gamepad::Open()
 Gamepad::Gamepad(SDL_GameController* controller)
 {
     gameController = controller;
-    keys = std::vector<KeyInfo>(SDL_CONTROLLER_BUTTON_MAX);
+    keys = std::vector<ButtonState>(SDL_CONTROLLER_BUTTON_MAX);
     axes = std::vector<double>(SDL_CONTROLLER_AXIS_MAX);
 
     InitializeKeys();
@@ -40,21 +40,17 @@ void Gamepad::Update(SDL_Event& event)
     while (SDL_PollEvent(&event)) {
         switch (event.type) {
             case SDL_CONTROLLERBUTTONDOWN: {
-                keyInfoQueue.push_back(KeyInfo{true, SDL_GameControllerButton(event.cbutton.button)});
-                int buttonIndex = event.cbutton.button;
-                std::cout << "Button " << buttonIndex << " pressed" << std::endl;
+                buttonEventQueue.push_back({SDL_GameControllerButton(event.cbutton.button), true});
                 break;
             }
             case SDL_CONTROLLERBUTTONUP: {
-                keyInfoQueue.push_back(KeyInfo{false, SDL_GameControllerButton(event.cbutton.button)});
-                int buttonIndex = event.cbutton.button;
-                std::cout << "Button " << buttonIndex << " released" << std::endl;
+                buttonEventQueue.push_back({SDL_GameControllerButton(event.cbutton.button), false});
                 break;
             }
         }
     }
 
-    for (int i = 0; i < SDL_CONTROLLER_AXIS_MAX; i++) {
+    for (int i = 0; i < Gamepad::AxisCount; i++) {
         axes[i] = std::clamp(
                     SDL_GameControllerGetAxis(
                        gameController,
@@ -67,7 +63,7 @@ void Gamepad::Update(SDL_Event& event)
     }
 }
 
-const std::vector<KeyInfo>& Gamepad::GetKeys()
+const std::vector<ButtonState>& Gamepad::GetKeys()
 {
     return keys;
 }
@@ -77,7 +73,34 @@ const std::vector<double>& Gamepad::GetAxes()
     return axes;
 }
 
-std::vector<KeyInfo> &Gamepad::GetKeyEvents()
+bool Gamepad::WasKeyPressed(int i)
 {
-    return keyInfoQueue;
+    return keys[i].CurrentState && !keys[i].PreviousState;
+}
+
+void Gamepad::ConsumeKey(int i)
+{
+    keys[i].PreviousState = keys[i].CurrentState;
+}
+
+void Gamepad::ProcessPendingKeyEvents(ipc::Sender<Message::GamepadState> &sender)
+{
+   std::vector<ButtonEvent> processedQueue;
+   std::vector<bool> used(Gamepad::ButtonCount);
+   for (const auto& key : buttonEventQueue) {
+       if (used[key.Button]) {
+           processedQueue.push_back(key);
+           continue;
+       }
+       SetKeyState(key.Button, key.State);
+       sender._.buttonStates[key.Button].isPressed = key.State;
+       used[key.Button] = true;
+   }
+   buttonEventQueue = processedQueue;
+}
+
+void Gamepad::SetKeyState(int i, bool state)
+{
+    keys[i].PreviousState = keys[i].CurrentState;
+    keys[i].CurrentState = state;
 }

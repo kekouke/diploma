@@ -8,7 +8,7 @@ namespace Message {
         bool isPressed;
         ipc::Schema schema() {
             return ipc::Schema(this).title("Состояние кнопки")
-                   .add(IPC_STRING(name).title("Имя кнопки").default_("Undefined name"))
+                   .add(IPC_STRING(name).title("Имя кнопки").default_("Invalid name"))
                    .add(IPC_BOOL(isPressed).title("Состояние: ")
                                            .false_(ipc::Off, "Отпущена")
                                            .true_(ipc::On, "Нажата")
@@ -18,26 +18,25 @@ namespace Message {
     };
 
     struct AxisState {
-        double x;
-        double y;
+        ipc::String<20> name;
+        double value;
         ipc::Schema schema() {
-            return ipc::Schema(this).title("Состояние кнопки")
-                   .add(IPC_REAL(x).title("X").default_(0.0))
-                   .add(IPC_REAL(y).title("Y").default_(0.0))
+            return ipc::Schema(this).title("Состояние оси")
+                   .add(IPC_STRING(name).title("Наименование оси").default_("Invalid name"))
+                   .add(IPC_REAL(value).title("Значение").default_(0.0))
                    ;
         }
     };
 
     struct GamepadState {
         ButtonState buttonStates[21];
-        AxisState leftStick;
-        AxisState rightStick;
+        AxisState axesState[4];
         ipc::Schema schema() {
             return ipc::Schema(this).title("Состояние геймпада")
                    .add(IPC_STRUCTS(buttonStates).title("Состояние кнопок")
                                                  .element_title("Состояние кнопки"))
-                   .add(IPC_STRUCT(leftStick).title("Левый стик"))
-                   .add(IPC_STRUCT(rightStick).title("Правый стик"))
+                   .add(IPC_STRUCTS(axesState).title("Состояние осей")
+                                                 .element_title("Состояние оси"))
                    ;
         }
     };

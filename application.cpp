@@ -1,6 +1,67 @@
 #include "application.h"
-#include "messages.h"       // Подключаем сообщения (и библиотеку IPC заодно)
 #include <vector>
+
+#include <unordered_map>
+#include <fstream>
+
+#include "motion.h"
+
+std::unordered_map<std::string, std::string> loadConfig(std::string fileName) {
+    std::ifstream config(fileName);
+
+    std::unordered_map<std::string, std::string> input_to_action;
+
+    std::string action;
+    while (std::getline(config, action, ':')) {
+        std::string inputName;
+        config >> inputName;
+        input_to_action[inputName] = action;
+        config.get();
+    }
+
+    return input_to_action;
+}
+
+void getGamepadBindings(
+        std::unordered_map<std::string, std::string>& for_buttons,
+        std::unordered_map<std::string, std::string>& for_axes
+) {
+    for_buttons = loadConfig("button_config.txt");
+    for_axes = loadConfig("axes_config.txt");
+}
+
+void fillDefault(ipc::Sender<motion::Control>& control) {
+    control._.parameters[geo::Right]  .value = 0;
+    control._.parameters[geo::Right]  .type  = motion::ControlType::Force;
+    control._.parameters[geo::Right]  .frame = scene::Absent;
+
+    control._.parameters[geo::Forward].value = 0;
+    control._.parameters[geo::Forward].type  = motion::ControlType::Force;
+    control._.parameters[geo::Forward].frame = scene::Absent;
+
+    control._.parameters[geo::Up]     .value = 0;
+    control._.parameters[geo::Up]     .type  = motion::ControlType::Position;
+    control._.parameters[geo::Up]     .frame = scene::Zero;
+
+    control._.parameters[geo::Yaw]    .value = 0;
+    control._.parameters[geo::Yaw]    .type  = motion::ControlType::Force;
+    control._.parameters[geo::Yaw]    .frame = scene::Absent;
+
+    control._.parameters[geo::Pitch]  .value = 0;
+    control._.parameters[geo::Pitch]  .type  = motion::ControlType::Force;
+    control._.parameters[geo::Pitch]  .frame = scene::Absent;
+
+    control._.parameters[geo::Roll]   .value = 0;
+    control._.parameters[geo::Roll]   .type  = motion::ControlType::Force;
+    control._.parameters[geo::Roll]   .frame = scene::Absent;
+}
+
+void initializeSenderForControl(ipc::Sender<motion::Control>& control) {
+    control._.is_compensation = false;
+    control._.priority        = motion::Priority::Highest;
+    control._.time_limit      = 2;
+    fillDefault(control);
+}
 
 Application::Application()
 {
@@ -23,6 +84,8 @@ Application::~Application()
 
 void Application::Run(int argc, char *argv[])
 {
+    bool isControlAvailable = false;
+
     // Описание приложения
     ipc::Core::Description description;
     description._title       = "Тест";
@@ -32,81 +95,120 @@ void Application::Run(int argc, char *argv[])
     ipc::Core core(argc, argv, description);
     // Загружаем настройки модуля
     ipc::Loader<Message::Init>      init(core);
-    // Получаем режим работы
-    // В режиме sender будем отправлять данные по таймеру, в режиме receiver - получать
-    bool isSender = false;
-    for (int val = 1; val < argc; ++val) {
-        if (std::string(argv[val]) == "--sender") {
-            isSender = true;
-            break;
-        }
+
+    std::unordered_map<std::string, std::string> button_to_action;
+    std::unordered_map<std::string, std::string> axes_to_action;
+
+
+    getGamepadBindings(button_to_action, axes_to_action);
+
+    ipc::Sender<Message::State> programStateLogger(core);
+    programStateLogger._.settings = init._;
+    programStateLogger._.send_regime = true;
+
+    ipc::Sender<Message::GamepadState> gamepadLogSender(core, ipc::RegisterEnable);
+
+    for (int i = 0; i < Gamepad::ButtonCount; i++) {
+        gamepadLogSender._.buttonStates[i].name = SDL_GameControllerGetStringForButton(SDL_GameControllerButton(i));
+    }
+    for (int i = 0; i < Gamepad::AxisCount; i++) {
+        gamepadLogSender._.axesState[i].name = SDL_GameControllerGetStringForAxis(SDL_GameControllerAxis(i));
     }
 
-    ipc::Sender<Message::State> pub_state(core);
-    pub_state._.settings = init._;
-    pub_state._.send_regime = isSender;
-
-    ipc::Sender<Message::GamepadState> sender(core, isSender ? ipc::RegisterEnable: ipc::RegisterDisable);
-    ipc::Receiver<Message::GamepadState> receiver(core, isSender ? ipc::RegisterDisable : ipc::RegisterEnable);
-
-    int i = 0;
-    for (const auto& key : gamepad->GetKeys()) {
-        sender._.buttonStates[i++].name = SDL_GameControllerGetStringForButton(key.Button);
-    }
+    ipc::Sender<motion::Control>    control(core);
+    initializeSenderForControl(control);
 
     // Регистрация таймера с ручным запуском
-    ipc::Timer tmr_send_read(core);
-    double interval = isSender ? init._.send_timer : init._.read_timer;
-    tmr_send_read.start(interval);
+    ipc::Timer sendTimer(core);
+    sendTimer.start(init._.send_timer);
 
     ipc::Timer tmr_state(core, init._.state_timer);
 
     SDL_Event event;
     while (core.receive()) {
-        if (isSender) {
-            gamepad->Update(event);
-        }
+        gamepad->Update(event);
+
         if (tmr_state.received()) {
-            pub_state.send();
+            programStateLogger.send();
             // Только одно событие в итерации цикла!
             continue;
         }
-        if (tmr_send_read.received()) {
-            if (isSender) {
-                ProcessPendingKeyEvents(sender);
-                sender._.leftStick.x = gamepad->GetValueForAxis(Axis::LeftStickHorizontal);
-                sender._.leftStick.y = gamepad->GetValueForAxis(Axis::LeftStickVertical);
-                sender._.rightStick.x = gamepad->GetValueForAxis(Axis::RightStickHorizontal);
-                sender._.rightStick.y = gamepad->GetValueForAxis(Axis::RightStickVertical);
-                sender.send();
-            }
-            continue;
-        }
-        if (receiver.received()) {
-            for (int i = 0; i < 1; i++) {
-                core.log(
-                     ipc::Ok,
-                     "(RECEIVE) Кнопка '%s': %s",
-                     receiver._.buttonStates[i].name.to_std_string().c_str(),
-                     receiver._.buttonStates[i].isPressed ? "нажата" : "отпущена");
-            }
-            core.log(ipc::Ok, "(RECEIVE) Left stick: X = %lf Y = %lf", receiver._.leftStick.x, receiver._.leftStick.y);
-            core.log(ipc::Ok, "(RECEIVE) Right stick: X = %lf Y = %lf", receiver._.rightStick.x, receiver._.rightStick.y);
-        }
-    }
-}
+        if (sendTimer.received()) {
+            gamepad->ProcessPendingKeyEvents(gamepadLogSender);
 
-void Application::ProcessPendingKeyEvents(ipc::Sender<Message::GamepadState>& sender)
-{
-    std::vector<KeyInfo> processedQueue;
-    std::vector<bool> used(21);
-    for (const auto& key : gamepad->GetKeyEvents()) {
-        if (used[key.Button]) {
-            processedQueue.push_back(key);
-            continue;
+            for (int i = 0; i < Gamepad::AxisCount; i++) {
+                gamepadLogSender._.axesState[i].value = gamepad->GetValueForAxis(Axis(i));
+            }
+
+            gamepadLogSender.send();
+
+            for (int i = 0; i < Gamepad::ButtonCount; i++) {
+                if (gamepad->WasKeyPressed(i)) {
+                    if (button_to_action.count(gamepadLogSender._.buttonStates[i].name)) {
+                        std::string action = button_to_action[gamepadLogSender._.buttonStates[i].name];
+
+                        if (action == "control_on") {
+                            gamepad->ConsumeKey(i);
+                            isControlAvailable = true;
+                            std::cout << "control on" << std::endl;
+                        }
+                        if (action == "control_off") {
+                            gamepad->ConsumeKey(i);
+                            isControlAvailable = false;
+                            std::cout << "control off" << std::endl;
+                        }
+                    }
+                }
+            }
+
+
+            if (!isControlAvailable) continue;
+
+            bool has_changes = false;
+
+            for (int i = 0; i < Gamepad::AxisCount; i++) {
+                if (!gamepad->HasValueForAxis(i)) {
+                    continue;
+                }
+
+                double force_up         = 25;
+                double force_pitch      = 7.5;
+
+                control._.parameters[geo::Up]     .value = force_up;
+                control._.parameters[geo::Up]     .type  = motion::ControlType::Force;
+                control._.parameters[geo::Up]     .frame = scene::Absent;
+
+                control._.parameters[geo::Pitch]  .value = force_pitch;
+                control._.parameters[geo::Pitch]  .type  = motion::ControlType::Force;
+                control._.parameters[geo::Pitch]  .frame = scene::Absent;
+
+                std::string action = axes_to_action[gamepadLogSender._.axesState[i].name];
+                if (action == "move_forward") {
+                    double velocity_forvard = -gamepadLogSender._.axesState[i].value * 10;
+
+                    control._.parameters[geo::Forward].value = velocity_forvard;
+                    control._.parameters[geo::Forward].type  = motion::ControlType::Velocity;
+                    control._.parameters[geo::Forward].frame = scene::Absent;
+
+                    std::cout << "move_vertical" << std::endl;
+                    has_changes = true;
+                }
+                if (action == "move_horizontal") {
+                    double velocity_yaw     = gamepadLogSender._.axesState[i].value * 10;
+
+                    control._.parameters[geo::Yaw]    .value = velocity_yaw;
+                    control._.parameters[geo::Yaw]    .type  = motion::ControlType::Velocity;
+                    control._.parameters[geo::Yaw]    .frame = scene::Absent;
+
+                    std::cout << "move_horizontal" << std::endl;
+                    has_changes = true;
+                }
+            }
+
+            if (has_changes) {
+                control.send();
+                fillDefault(control);
+            }
         }
-        sender._.buttonStates[key.Button].isPressed = key.IsPressed;
-        used[key.Button] = true;
     }
-    gamepad->GetKeyEvents() = processedQueue;
 }
