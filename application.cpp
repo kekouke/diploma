@@ -69,11 +69,7 @@ Application::Application()
         std::cerr << "Failed to initialize SDL: " << SDL_GetError() << std::endl;
         exit(1);
     }
-    gamepad = Gamepad::Open();
-    if (gamepad == nullptr) {
-        std::cerr << "Failed to open game controller: " << SDL_GetError() << std::endl;
-        exit(1);
-    }
+    gamepad = new Gamepad();
 }
 
 Application::~Application()
@@ -84,8 +80,6 @@ Application::~Application()
 
 void Application::Run(int argc, char *argv[])
 {
-    bool isControlAvailable = false;
-
     // Описание приложения
     ipc::Core::Description description;
     description._title       = "Тест";
@@ -123,16 +117,39 @@ void Application::Run(int argc, char *argv[])
     sendTimer.start(init._.send_timer);
 
     ipc::Timer tmr_state(core, init._.state_timer);
-
     SDL_Event event;
     while (core.receive()) {
-        gamepad->Update(event);
+        while (SDL_PollEvent(&event)) {
+            switch (event.type) {
+                case SDL_CONTROLLERDEVICEADDED:
+                    OnJoystickConnected(event.cdevice.which);
+                    break;
+                case SDL_CONTROLLERDEVICEREMOVED:
+                    OnJoystickDisconnected();
+                    break;
+                case SDL_CONTROLLERBUTTONDOWN:
+                    gamepad->SetButtonState(SDL_GameControllerButton(event.cbutton.button), true);
+                    break;
+                case SDL_CONTROLLERBUTTONUP:
+                    gamepad->SetButtonState(SDL_GameControllerButton(event.cbutton.button), false);
+                    break;
+            }
+        }
+
+        if (!isGamepadAvailable) {
+            continue;
+        }
+        std::cout << "Hello, world" << std::endl;
+
+
+        gamepad->UpdateAxes(); // TODO:
 
         if (tmr_state.received()) {
             programStateLogger.send();
             // Только одно событие в итерации цикла!
             continue;
         }
+
         if (sendTimer.received()) {
             gamepad->ProcessPendingKeyEvents(gamepadLogSender);
 
@@ -149,12 +166,12 @@ void Application::Run(int argc, char *argv[])
 
                         if (action == "control_on") {
                             gamepad->ConsumeKey(i);
-                            isControlAvailable = true;
+                            ToggleInputControl(true);
                             std::cout << "control on" << std::endl;
                         }
                         if (action == "control_off") {
                             gamepad->ConsumeKey(i);
-                            isControlAvailable = false;
+                            ToggleInputControl(false);
                             std::cout << "control off" << std::endl;
                         }
                     }
@@ -162,7 +179,7 @@ void Application::Run(int argc, char *argv[])
             }
 
 
-            if (!isControlAvailable) continue;
+            if (!IsControlEnable()) continue;
 
             bool has_changes = false;
 
@@ -211,4 +228,46 @@ void Application::Run(int argc, char *argv[])
             }
         }
     }
+}
+
+void Application::OnJoystickConnected(int deviceIndex)
+{
+    if (!SDL_IsGameController(deviceIndex)) {
+        return;
+    }
+    if (!isGamepadAvailable) {
+        gamepad->Open(deviceIndex);
+        isGamepadAvailable = true;
+        ToggleInputControl(false);
+        std::cout << "Gamepad connected." << std::endl;
+    }
+}
+
+void Application::OnJoystickDisconnected()
+{
+    if (!gamepad->IsAtached()) {
+        std::cout << "Gamepad disconnected." << std::endl;
+        gamepad->Close();
+        isGamepadAvailable = false;
+        for (int i = 0; i < SDL_NumJoysticks(); i++) {
+            if (!SDL_IsGameController(i)) {
+                continue;
+            }
+            if (gamepad->Open(i)) {
+                isGamepadAvailable = true;
+                ToggleInputControl(false);
+                return;
+            }
+        }
+    }
+}
+
+void Application::ToggleInputControl(bool value)
+{
+    isControlEnable = value;
+}
+
+bool Application::IsControlEnable()
+{
+    return isControlEnable;
 }

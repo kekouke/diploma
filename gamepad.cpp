@@ -1,18 +1,21 @@
 #include "gamepad.h"
 
-Gamepad* Gamepad::Open()
+bool Gamepad::Open(int deviceIndex)
 {
-    SDL_GameController* controller;
-    controller = SDL_GameControllerOpen(0);
-    if (controller == nullptr) {
-        return nullptr;
-    }
-    return new Gamepad(controller);
+    gameController = SDL_GameControllerOpen(deviceIndex);
+    return gameController != nullptr;
 }
 
-Gamepad::Gamepad(SDL_GameController* controller)
+void Gamepad::Close()
 {
-    gameController = controller;
+    if (gameController != nullptr) {
+        SDL_GameControllerClose(gameController);
+        gameController = nullptr;
+    }
+}
+
+Gamepad::Gamepad()
+{
     keys = std::vector<ButtonState>(SDL_CONTROLLER_BUTTON_MAX);
     axes = std::vector<double>(SDL_CONTROLLER_AXIS_MAX);
 
@@ -22,6 +25,7 @@ Gamepad::Gamepad(SDL_GameController* controller)
 void Gamepad::InitializeKeys()
 {
     int i = 0;
+
     for (auto& key : keys) {
         key.Button = SDL_GameControllerButton(i++);
     }
@@ -29,27 +33,11 @@ void Gamepad::InitializeKeys()
 
 Gamepad::~Gamepad()
 {
-    if (gameController != nullptr) {
-        SDL_GameControllerClose(gameController);
-        gameController = nullptr;
-    }
+    Close();
 }
 
-void Gamepad::Update(SDL_Event& event)
+void Gamepad::UpdateAxes()
 {
-    while (SDL_PollEvent(&event)) {
-        switch (event.type) {
-            case SDL_CONTROLLERBUTTONDOWN: {
-                buttonEventQueue.push_back({SDL_GameControllerButton(event.cbutton.button), true});
-                break;
-            }
-            case SDL_CONTROLLERBUTTONUP: {
-                buttonEventQueue.push_back({SDL_GameControllerButton(event.cbutton.button), false});
-                break;
-            }
-        }
-    }
-
     for (int i = 0; i < Gamepad::AxisCount; i++) {
         axes[i] = std::clamp(
                     SDL_GameControllerGetAxis(
@@ -71,6 +59,11 @@ const std::vector<ButtonState>& Gamepad::GetKeys()
 const std::vector<double>& Gamepad::GetAxes()
 {
     return axes;
+}
+
+void Gamepad::SetButtonState(SDL_GameControllerButton button, bool value)
+{
+    buttonEventQueue.push_back({button, value});
 }
 
 bool Gamepad::WasKeyPressed(int i)
@@ -98,6 +91,13 @@ void Gamepad::ProcessPendingKeyEvents(ipc::Sender<Message::GamepadState> &sender
    }
    buttonEventQueue = processedQueue;
 }
+
+bool Gamepad::IsAtached()
+{
+    if (gameController == nullptr) return false;
+    return SDL_GameControllerGetAttached(gameController);
+}
+
 
 void Gamepad::SetKeyState(int i, bool state)
 {

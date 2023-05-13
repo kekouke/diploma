@@ -36,10 +36,12 @@ public:
     static const int ButtonCount = SDL_CONTROLLER_BUTTON_MAX;
     static const int AxisCount = 4;
 
-    static Gamepad* Open();
+    bool Open(int deviceIndex);
+    void Close();
+    Gamepad();
     ~Gamepad();
 
-    void Update(SDL_Event& event);
+    void UpdateAxes();
     const std::vector<ButtonState>& GetKeys();
     const std::vector<double>& GetAxes();
 
@@ -51,15 +53,16 @@ public:
         return abs(axes[i]) >= DEADZONE;
     }
 
+    void SetButtonState(SDL_GameControllerButton button, bool value);
     bool WasKeyPressed(int i);
     void ConsumeKey(int i);
     void ProcessPendingKeyEvents(ipc::Sender<Message::GamepadState>& sender);
 
+    bool IsAtached();
+
 private:
     const int HOLD_THRESHOLD_MS = 300;
     const float DEADZONE = 0.2f;
-
-    Gamepad(SDL_GameController*);
 
     void InitializeKeys();
     void SetKeyState(int i, bool state);

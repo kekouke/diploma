@@ -1,6 +1,7 @@
 #pragma once
 
 #include <iostream>
+#include <set>
 
 #include "gamepad.h"
 #include "messages.h"
@@ -15,7 +16,14 @@ public:
     ~Application();
 
     void Run(int argc, char *argv[]);
+    void ToggleInputControl(bool value);
+    bool IsControlEnable();
 
 private:
+    void OnJoystickConnected(int deviceIndex);
+    void OnJoystickDisconnected();
+
     Gamepad* gamepad;
+    bool isControlEnable = false;
+    bool isGamepadAvailable = false;
 };
