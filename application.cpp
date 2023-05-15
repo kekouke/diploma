@@ -5,62 +5,109 @@
 #include <fstream>
 
 #include "motion.h"
+#include "command.h"
 
-std::unordered_map<std::string, std::string> loadConfig(std::string fileName) {
-    std::ifstream config(fileName);
+KeyCommand start_control;
+KeyCommand stop_control;
+KeyCommand set_min_speed;
+KeyCommand set_slow_speed;
+KeyCommand set_max_speed;
+KeyCommand set_zero_speed;
+AxisCommand move_forward;
+AxisCommand move_right;
 
-    std::unordered_map<std::string, std::string> input_to_action;
+void fillDefault(ipc::Sender<motion::Control>* control) {
+    control->_.parameters[geo::Right]  .value = 0;
+    control->_.parameters[geo::Right]  .type  = motion::ControlType::Force;
+    control->_.parameters[geo::Right]  .frame = scene::Absent;
 
-    std::string action;
-    while (std::getline(config, action, ':')) {
-        std::string inputName;
-        config >> inputName;
-        input_to_action[inputName] = action;
-        config.get();
+    control->_.parameters[geo::Forward].value = 0;
+    control->_.parameters[geo::Forward].type  = motion::ControlType::Force;
+    control->_.parameters[geo::Forward].frame = scene::Absent;
+
+    control->_.parameters[geo::Up]     .value = 0;
+    control->_.parameters[geo::Up]     .type  = motion::ControlType::Position;
+    control->_.parameters[geo::Up]     .frame = scene::Zero;
+
+    control->_.parameters[geo::Yaw]    .value = 0;
+    control->_.parameters[geo::Yaw]    .type  = motion::ControlType::Force;
+    control->_.parameters[geo::Yaw]    .frame = scene::Absent;
+
+    control->_.parameters[geo::Pitch]  .value = 0;
+    control->_.parameters[geo::Pitch]  .type  = motion::ControlType::Force;
+    control->_.parameters[geo::Pitch]  .frame = scene::Absent;
+
+    control->_.parameters[geo::Roll]   .value = 0;
+    control->_.parameters[geo::Roll]   .type  = motion::ControlType::Force;
+    control->_.parameters[geo::Roll]   .frame = scene::Absent;
+}
+
+void initializeSenderForControl(ipc::Sender<motion::Control>* control) {
+    control->_.is_compensation = false;
+    control->_.priority = motion::Priority::Highest;
+    control->_.time_limit = 2;
+    fillDefault(control);
+}
+
+void Application::Initialize(int argc, char *argv[], ipc::Core::Description description)
+{
+    core = new ipc::Core(argc, argv, description);
+    gamepad = new Gamepad();
+
+    // Загружаем настройки
+    ipc::Loader<Message::Init> init(*core);
+    sendStateInterval = init._.state_timer;
+    sendDataInterval = init._.send_timer;
+
+    LoadGamepadMapping(core);
+
+    programStateLogger = new ipc::Sender<Message::State>(*core);
+    programStateLogger->_.settings = init._;
+    programStateLogger->_.send_regime = true;
+
+    gamepadStateLogger = new ipc::Sender<Message::GamepadState>(*core, ipc::RegisterEnable);
+    for (int i = 0; i < Gamepad::ButtonCount; i++) {
+        gamepadStateLogger->_.buttonStates[i].name =
+                SDL_GameControllerGetStringForButton(SDL_GameControllerButton(i));
+    }
+    for (int i = 0; i < Gamepad::AxisCount; i++) {
+        gamepadStateLogger->_.axesState[i].name =
+                SDL_GameControllerGetStringForAxis(SDL_GameControllerAxis(i));
     }
 
-    return input_to_action;
+    control = new ipc::Sender<motion::Control>(*core);
+    initializeSenderForControl(control);
 }
 
-void getGamepadBindings(
-        std::unordered_map<std::string, std::string>& for_buttons,
-        std::unordered_map<std::string, std::string>& for_axes
-) {
-    for_buttons = loadConfig("button_config.txt");
-    for_axes = loadConfig("axes_config.txt");
-}
+void Application::LoadGamepadMapping(ipc::Core* core) {
+    ipc::Loader<Message::GamepadMapping> gamepadMapping(*core);
 
-void fillDefault(ipc::Sender<motion::Control>& control) {
-    control._.parameters[geo::Right]  .value = 0;
-    control._.parameters[geo::Right]  .type  = motion::ControlType::Force;
-    control._.parameters[geo::Right]  .frame = scene::Absent;
+    start_control.mappedKey = SDL_GameControllerGetButtonFromString(
+                gamepadMapping._.start_control.to_std_string().c_str()
+    );
+    stop_control.mappedKey = SDL_GameControllerGetButtonFromString(
+                gamepadMapping._.stop_control.to_std_string().c_str()
+    );
+    set_min_speed.mappedKey = SDL_GameControllerGetButtonFromString(
+                gamepadMapping._.set_min_speed.to_std_string().c_str()
+    );
+    set_slow_speed.mappedKey = SDL_GameControllerGetButtonFromString(
+                gamepadMapping._.set_slow_speed.to_std_string().c_str()
+    );
+    set_max_speed.mappedKey = SDL_GameControllerGetButtonFromString(
+                gamepadMapping._.set_max_speed.to_std_string().c_str()
+    );
+    set_zero_speed.mappedKey = SDL_GameControllerGetButtonFromString(
+                gamepadMapping._.set_zero_speed.to_std_string().c_str()
+    );
 
-    control._.parameters[geo::Forward].value = 0;
-    control._.parameters[geo::Forward].type  = motion::ControlType::Force;
-    control._.parameters[geo::Forward].frame = scene::Absent;
 
-    control._.parameters[geo::Up]     .value = 0;
-    control._.parameters[geo::Up]     .type  = motion::ControlType::Position;
-    control._.parameters[geo::Up]     .frame = scene::Zero;
-
-    control._.parameters[geo::Yaw]    .value = 0;
-    control._.parameters[geo::Yaw]    .type  = motion::ControlType::Force;
-    control._.parameters[geo::Yaw]    .frame = scene::Absent;
-
-    control._.parameters[geo::Pitch]  .value = 0;
-    control._.parameters[geo::Pitch]  .type  = motion::ControlType::Force;
-    control._.parameters[geo::Pitch]  .frame = scene::Absent;
-
-    control._.parameters[geo::Roll]   .value = 0;
-    control._.parameters[geo::Roll]   .type  = motion::ControlType::Force;
-    control._.parameters[geo::Roll]   .frame = scene::Absent;
-}
-
-void initializeSenderForControl(ipc::Sender<motion::Control>& control) {
-    control._.is_compensation = false;
-    control._.priority        = motion::Priority::Highest;
-    control._.time_limit      = 2;
-    fillDefault(control);
+    move_forward.mappedAxis = SDL_GameControllerGetAxisFromString(
+                gamepadMapping._.move_forward.to_std_string().c_str()
+    );
+    move_right.mappedAxis = SDL_GameControllerGetAxisFromString(
+                gamepadMapping._.move_right.to_std_string().c_str()
+    );
 }
 
 Application::Application()
@@ -69,163 +116,51 @@ Application::Application()
         std::cerr << "Failed to initialize SDL: " << SDL_GetError() << std::endl;
         exit(1);
     }
-    gamepad = new Gamepad();
 }
 
 Application::~Application()
 {
+    delete core;
+    delete control;
     delete gamepad;
+    delete gamepadStateLogger;
+    delete programStateLogger;
+    core = nullptr;
+    control = nullptr;
     gamepad = nullptr;
+    gamepadStateLogger = nullptr;
+    programStateLogger = nullptr;
 }
 
-void Application::Run(int argc, char *argv[])
+void Application::Run()
 {
-    // Описание приложения
-    ipc::Core::Description description;
-    description._title       = "Тест";
-    description._version     = "1.1";
-    description._description = "Тестовый модуль";
-    // Заводим ядро обмена сообщениями
-    ipc::Core core(argc, argv, description);
-    // Загружаем настройки модуля
-    ipc::Loader<Message::Init>      init(core);
+    ipc::Timer sendTimer(*core);
+    ipc::Timer tmr_state(*core);
+    sendTimer.start(sendDataInterval);
+    tmr_state.start(sendStateInterval);
 
-    std::unordered_map<std::string, std::string> button_to_action;
-    std::unordered_map<std::string, std::string> axes_to_action;
-
-
-    getGamepadBindings(button_to_action, axes_to_action);
-
-    ipc::Sender<Message::State> programStateLogger(core);
-    programStateLogger._.settings = init._;
-    programStateLogger._.send_regime = true;
-
-    ipc::Sender<Message::GamepadState> gamepadLogSender(core, ipc::RegisterEnable);
-
-    for (int i = 0; i < Gamepad::ButtonCount; i++) {
-        gamepadLogSender._.buttonStates[i].name = SDL_GameControllerGetStringForButton(SDL_GameControllerButton(i));
-    }
-    for (int i = 0; i < Gamepad::AxisCount; i++) {
-        gamepadLogSender._.axesState[i].name = SDL_GameControllerGetStringForAxis(SDL_GameControllerAxis(i));
-    }
-
-    ipc::Sender<motion::Control>    control(core);
-    initializeSenderForControl(control);
-
-    // Регистрация таймера с ручным запуском
-    ipc::Timer sendTimer(core);
-    sendTimer.start(init._.send_timer);
-
-    ipc::Timer tmr_state(core, init._.state_timer);
     SDL_Event event;
-    while (core.receive()) {
-        while (SDL_PollEvent(&event)) {
-            switch (event.type) {
-                case SDL_CONTROLLERDEVICEADDED:
-                    OnJoystickConnected(event.cdevice.which);
-                    break;
-                case SDL_CONTROLLERDEVICEREMOVED:
-                    OnJoystickDisconnected();
-                    break;
-                case SDL_CONTROLLERBUTTONDOWN:
-                    gamepad->SetButtonState(SDL_GameControllerButton(event.cbutton.button), true);
-                    break;
-                case SDL_CONTROLLERBUTTONUP:
-                    gamepad->SetButtonState(SDL_GameControllerButton(event.cbutton.button), false);
-                    break;
-            }
-        }
-
-        if (!isGamepadAvailable) {
-            continue;
-        }
-        std::cout << "Hello, world" << std::endl;
-
-
-        gamepad->UpdateAxes(); // TODO:
-
+    while (core->receive()) {
         if (tmr_state.received()) {
-            programStateLogger.send();
+            programStateLogger->send();
             // Только одно событие в итерации цикла!
             continue;
         }
 
+        PollEvents(event);
+
+        if (!isGamepadAvailable) {
+            continue;
+        }
+
         if (sendTimer.received()) {
-            gamepad->ProcessPendingKeyEvents(gamepadLogSender);
-
+            gamepad->ProcessPendingKeyEvents(gamepadStateLogger);
             for (int i = 0; i < Gamepad::AxisCount; i++) {
-                gamepadLogSender._.axesState[i].value = gamepad->GetValueForAxis(Axis(i));
+                gamepadStateLogger->_.axesState[i].value = gamepad->GetValueForAxis(Axis(i));
             }
-
-            gamepadLogSender.send();
-
-            for (int i = 0; i < Gamepad::ButtonCount; i++) {
-                if (gamepad->WasKeyPressed(i)) {
-                    if (button_to_action.count(gamepadLogSender._.buttonStates[i].name)) {
-                        std::string action = button_to_action[gamepadLogSender._.buttonStates[i].name];
-
-                        if (action == "control_on") {
-                            gamepad->ConsumeKey(i);
-                            ToggleInputControl(true);
-                            std::cout << "control on" << std::endl;
-                        }
-                        if (action == "control_off") {
-                            gamepad->ConsumeKey(i);
-                            ToggleInputControl(false);
-                            std::cout << "control off" << std::endl;
-                        }
-                    }
-                }
-            }
-
-
-            if (!IsControlEnable()) continue;
-
-            bool has_changes = false;
-
-            for (int i = 0; i < Gamepad::AxisCount; i++) {
-                if (!gamepad->HasValueForAxis(i)) {
-                    continue;
-                }
-
-                double force_up         = 25;
-                double force_pitch      = 7.5;
-
-                control._.parameters[geo::Up]     .value = force_up;
-                control._.parameters[geo::Up]     .type  = motion::ControlType::Force;
-                control._.parameters[geo::Up]     .frame = scene::Absent;
-
-                control._.parameters[geo::Pitch]  .value = force_pitch;
-                control._.parameters[geo::Pitch]  .type  = motion::ControlType::Force;
-                control._.parameters[geo::Pitch]  .frame = scene::Absent;
-
-                std::string action = axes_to_action[gamepadLogSender._.axesState[i].name];
-                if (action == "move_forward") {
-                    double velocity_forvard = -gamepadLogSender._.axesState[i].value * 10;
-
-                    control._.parameters[geo::Forward].value = velocity_forvard;
-                    control._.parameters[geo::Forward].type  = motion::ControlType::Velocity;
-                    control._.parameters[geo::Forward].frame = scene::Absent;
-
-                    std::cout << "move_vertical" << std::endl;
-                    has_changes = true;
-                }
-                if (action == "move_horizontal") {
-                    double velocity_yaw     = gamepadLogSender._.axesState[i].value * 10;
-
-                    control._.parameters[geo::Yaw]    .value = velocity_yaw;
-                    control._.parameters[geo::Yaw]    .type  = motion::ControlType::Velocity;
-                    control._.parameters[geo::Yaw]    .frame = scene::Absent;
-
-                    std::cout << "move_horizontal" << std::endl;
-                    has_changes = true;
-                }
-            }
-
-            if (has_changes) {
-                control.send();
-                fillDefault(control);
-            }
+            gamepadStateLogger->send();
+            ProcessCommands(control);
+            continue;
         }
     }
 }
@@ -259,6 +194,98 @@ void Application::OnJoystickDisconnected()
                 return;
             }
         }
+    }
+}
+
+void Application::PollEvents(SDL_Event &event)
+{
+    while (SDL_PollEvent(&event)) {
+        switch (event.type) {
+            case SDL_CONTROLLERDEVICEADDED:
+                OnJoystickConnected(event.cdevice.which);
+                break;
+            case SDL_CONTROLLERDEVICEREMOVED:
+                OnJoystickDisconnected();
+                break;
+            case SDL_CONTROLLERBUTTONDOWN:
+                gamepad->SetButtonState(SDL_GameControllerButton(event.cbutton.button), true);
+                break;
+            case SDL_CONTROLLERBUTTONUP:
+                gamepad->SetButtonState(SDL_GameControllerButton(event.cbutton.button), false);
+                break;
+        }
+    }
+    gamepad->UpdateAxes(); // TODO: Use case SDL_CONTROLLERAXISMOTION
+}
+
+void Application::ProcessCommands(ipc::Sender<motion::Control>* control)
+{
+    if (gamepad->WasKeyPressed(start_control.mappedKey)) {
+        gamepad->ConsumeKey(start_control.mappedKey);
+        ToggleInputControl(true);
+        std::cout << "control on" << std::endl;
+    }
+    if (gamepad->WasKeyPressed(stop_control.mappedKey)) {
+        gamepad->ConsumeKey(stop_control.mappedKey);
+        ToggleInputControl(false);
+        std::cout << "control off" << std::endl;
+        return;
+    }
+
+    if (!IsControlEnable()) return;
+
+    double speed_coeff = 1;
+
+    if (gamepad->WasKeyPressed(set_min_speed.mappedKey)) {
+        speed_coeff = 0.2;
+    }
+    if (gamepad->WasKeyPressed(set_slow_speed.mappedKey)) {
+        speed_coeff = 0.5;
+    }
+    if (gamepad->WasKeyPressed(set_max_speed.mappedKey)) {
+        speed_coeff = 2;
+    }
+
+    double force_up = 25;
+    double force_pitch = 7.5;
+    bool has_changes = false;
+
+    control->_.parameters[geo::Up].value = force_up;
+    control->_.parameters[geo::Up].type  = motion::ControlType::Force;
+    control->_.parameters[geo::Up].frame = scene::Absent;
+
+    control->_.parameters[geo::Pitch].value = force_pitch;
+    control->_.parameters[geo::Pitch].type  = motion::ControlType::Force;
+    control->_.parameters[geo::Pitch].frame = scene::Absent;
+
+    if (gamepad->HasValueForAxis(move_forward.mappedAxis)) {
+        double velocity_forward = -gamepad->GetValueForAxis((Axis)move_forward.mappedAxis) * 5 * speed_coeff;
+
+        control->_.parameters[geo::Forward].value = velocity_forward;
+        control->_.parameters[geo::Forward].type  = motion::ControlType::Velocity;
+        control->_.parameters[geo::Forward].frame = scene::Absent;
+
+        std::cout << "move_vertical" << std::endl;
+        has_changes = true;
+    }
+    if (gamepad->HasValueForAxis(move_right.mappedAxis)) {
+        double velocity_yaw = gamepad->GetValueForAxis((Axis)move_right.mappedAxis) * 5 * speed_coeff;
+
+        control->_.parameters[geo::Yaw].value = velocity_yaw;
+        control->_.parameters[geo::Yaw].type  = motion::ControlType::Velocity;
+        control->_.parameters[geo::Yaw].frame = scene::Absent;
+
+        std::cout << "move_horizontal" << std::endl;
+        has_changes = true;
+    }
+    if (gamepad->WasKeyPressed(set_zero_speed.mappedKey)) {
+        has_changes = true;
+        fillDefault(control);
+    }
+
+    if (has_changes) {
+        control->send();
+        fillDefault(control);
     }
 }
 

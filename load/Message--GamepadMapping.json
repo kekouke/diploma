@@ -1,0 +1,10 @@
+{
+    "start_control":"start",
+    "stop_control":"back",
+    "set_min_speed":"a",
+    "set_slow_speed":"b",
+    "set_max_speed":"x",
+    "set_zero_speed":"y",
+    "move_forward":"lefty",
+    "move_right":"rightx"
+}

@@ -76,7 +76,7 @@ void Gamepad::ConsumeKey(int i)
     keys[i].PreviousState = keys[i].CurrentState;
 }
 
-void Gamepad::ProcessPendingKeyEvents(ipc::Sender<Message::GamepadState> &sender)
+void Gamepad::ProcessPendingKeyEvents(ipc::Sender<Message::GamepadState>* sender)
 {
    std::vector<ButtonEvent> processedQueue;
    std::vector<bool> used(Gamepad::ButtonCount);
@@ -86,7 +86,7 @@ void Gamepad::ProcessPendingKeyEvents(ipc::Sender<Message::GamepadState> &sender
            continue;
        }
        SetKeyState(key.Button, key.State);
-       sender._.buttonStates[key.Button].isPressed = key.State;
+       sender->_.buttonStates[key.Button].isPressed = key.State;
        used[key.Button] = true;
    }
    buttonEventQueue = processedQueue;

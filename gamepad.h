@@ -56,7 +56,7 @@ public:
     void SetButtonState(SDL_GameControllerButton button, bool value);
     bool WasKeyPressed(int i);
     void ConsumeKey(int i);
-    void ProcessPendingKeyEvents(ipc::Sender<Message::GamepadState>& sender);
+    void ProcessPendingKeyEvents(ipc::Sender<Message::GamepadState>* sender);
 
     bool IsAtached();
 

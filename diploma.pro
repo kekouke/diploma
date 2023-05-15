@@ -27,6 +27,7 @@ SOURCES += \
 
 
 HEADERS += \
+    command.h \
     messages.h \
     application.h \
     gamepad.h \
