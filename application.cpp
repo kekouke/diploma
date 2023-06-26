@@ -6,15 +6,7 @@
 
 #include "motion.h"
 #include "command.h"
-
-KeyCommand start_control;
-KeyCommand stop_control;
-KeyCommand set_min_speed;
-KeyCommand set_slow_speed;
-KeyCommand set_max_speed;
-KeyCommand set_zero_speed;
-AxisCommand move_forward;
-AxisCommand move_right;
+#include "commands.h"
 
 void fillDefault(ipc::Sender<motion::Control>* control) {
     control->_.parameters[geo::Right]  .value = 0;
@@ -82,31 +74,33 @@ void Application::Initialize(int argc, char *argv[], ipc::Core::Description desc
 void Application::LoadGamepadMapping(ipc::Core* core) {
     ipc::Loader<Message::GamepadMapping> gamepadMapping(*core);
 
-    start_control.mappedKey = SDL_GameControllerGetButtonFromString(
-                gamepadMapping._.start_control.to_std_string().c_str()
+    Commands::start_control.mappedKey = SDL_GameControllerGetButtonFromString(
+              gamepadMapping._.button_commands.start_control.binding.to_std_string().c_str()
     );
-    stop_control.mappedKey = SDL_GameControllerGetButtonFromString(
-                gamepadMapping._.stop_control.to_std_string().c_str()
+
+    Commands::stop_control.mappedKey = SDL_GameControllerGetButtonFromString(
+            gamepadMapping._.button_commands.stop_control.binding.to_std_string().c_str()
     );
-    set_min_speed.mappedKey = SDL_GameControllerGetButtonFromString(
-                gamepadMapping._.set_min_speed.to_std_string().c_str()
+
+    Commands::set_min_speed.mappedKey = SDL_GameControllerGetButtonFromString(
+                gamepadMapping._.button_commands.set_min_speed.binding.to_std_string().c_str()
     );
-    set_slow_speed.mappedKey = SDL_GameControllerGetButtonFromString(
-                gamepadMapping._.set_slow_speed.to_std_string().c_str()
+    Commands::set_slow_speed.mappedKey = SDL_GameControllerGetButtonFromString(
+                gamepadMapping._.button_commands.set_slow_speed.binding.to_std_string().c_str()
     );
-    set_max_speed.mappedKey = SDL_GameControllerGetButtonFromString(
-                gamepadMapping._.set_max_speed.to_std_string().c_str()
+    Commands::set_max_speed.mappedKey = SDL_GameControllerGetButtonFromString(
+                gamepadMapping._.button_commands.set_max_speed.binding.to_std_string().c_str()
     );
-    set_zero_speed.mappedKey = SDL_GameControllerGetButtonFromString(
-                gamepadMapping._.set_zero_speed.to_std_string().c_str()
+    Commands::set_zero_speed.mappedKey = SDL_GameControllerGetButtonFromString(
+                gamepadMapping._.button_commands.set_zero_speed.binding.to_std_string().c_str()
     );
 
 
-    move_forward.mappedAxis = SDL_GameControllerGetAxisFromString(
-                gamepadMapping._.move_forward.to_std_string().c_str()
+    Commands::move_forward.mappedAxis = SDL_GameControllerGetAxisFromString(
+                gamepadMapping._.axis_commands.move_forward.binding.to_std_string().c_str()
     );
-    move_right.mappedAxis = SDL_GameControllerGetAxisFromString(
-                gamepadMapping._.move_right.to_std_string().c_str()
+    Commands::move_right.mappedAxis = SDL_GameControllerGetAxisFromString(
+                gamepadMapping._.axis_commands.move_right.binding.to_std_string().c_str()
     );
 }
 
@@ -125,6 +119,7 @@ Application::~Application()
     delete gamepad;
     delete gamepadStateLogger;
     delete programStateLogger;
+
     core = nullptr;
     control = nullptr;
     gamepad = nullptr;
@@ -139,7 +134,12 @@ void Application::Run()
     sendTimer.start(sendDataInterval);
     tmr_state.start(sendStateInterval);
 
+    ipc::Sender<Message::GamepadMapping> jsondata(*core);
+
+    jsondata.send();
+
     SDL_Event event;
+
     while (core->receive()) {
         if (tmr_state.received()) {
             programStateLogger->send();
@@ -154,9 +154,12 @@ void Application::Run()
         }
 
         if (sendTimer.received()) {
-            gamepad->ProcessPendingKeyEvents(gamepadStateLogger);
+            gamepad->ProcessPendingKeyEvents();
             for (int i = 0; i < Gamepad::AxisCount; i++) {
                 gamepadStateLogger->_.axesState[i].value = gamepad->GetValueForAxis(Axis(i));
+            }
+            for (int i = 0; i < Gamepad::ButtonCount; i++) {
+                // gamepadStateLogger->_.buttonStates[i].isPressed = gamepad->IsKeyPressed(i);
             }
             gamepadStateLogger->send();
             ProcessCommands(control);
@@ -175,6 +178,7 @@ void Application::OnJoystickConnected(int deviceIndex)
         isGamepadAvailable = true;
         ToggleInputControl(false);
         std::cout << "Gamepad connected." << std::endl;
+        core->log("Gamepad connected");
     }
 }
 
@@ -215,20 +219,22 @@ void Application::PollEvents(SDL_Event &event)
                 break;
         }
     }
-    gamepad->UpdateAxes(); // TODO: Use case SDL_CONTROLLERAXISMOTION
+    gamepad->UpdateAxes(); // TODO: SDL_CONTROLLERAXISMOTION
 }
 
 void Application::ProcessCommands(ipc::Sender<motion::Control>* control)
 {
-    if (gamepad->WasKeyPressed(start_control.mappedKey)) {
-        gamepad->ConsumeKey(start_control.mappedKey);
+    if (gamepad->WasKeyPressed(Commands::start_control.mappedKey)) {
+        gamepad->ConsumeKey(Commands::start_control.mappedKey);
         ToggleInputControl(true);
         std::cout << "control on" << std::endl;
+        core->log("Управление включено");
     }
-    if (gamepad->WasKeyPressed(stop_control.mappedKey)) {
-        gamepad->ConsumeKey(stop_control.mappedKey);
+    if (gamepad->WasKeyPressed(Commands::stop_control.mappedKey)) {
+        gamepad->ConsumeKey(Commands::stop_control.mappedKey);
         ToggleInputControl(false);
         std::cout << "control off" << std::endl;
+        core->log("Управление отключено");
         return;
     }
 
@@ -236,13 +242,13 @@ void Application::ProcessCommands(ipc::Sender<motion::Control>* control)
 
     double speed_coeff = 1;
 
-    if (gamepad->WasKeyPressed(set_min_speed.mappedKey)) {
+    if (gamepad->WasKeyPressed(Commands::set_min_speed.mappedKey)) {
         speed_coeff = 0.2;
     }
-    if (gamepad->WasKeyPressed(set_slow_speed.mappedKey)) {
+    if (gamepad->WasKeyPressed(Commands::set_slow_speed.mappedKey)) {
         speed_coeff = 0.5;
     }
-    if (gamepad->WasKeyPressed(set_max_speed.mappedKey)) {
+    if (gamepad->WasKeyPressed(Commands::set_max_speed.mappedKey)) {
         speed_coeff = 2;
     }
 
@@ -258,8 +264,8 @@ void Application::ProcessCommands(ipc::Sender<motion::Control>* control)
     control->_.parameters[geo::Pitch].type  = motion::ControlType::Force;
     control->_.parameters[geo::Pitch].frame = scene::Absent;
 
-    if (gamepad->HasValueForAxis(move_forward.mappedAxis)) {
-        double velocity_forward = -gamepad->GetValueForAxis((Axis)move_forward.mappedAxis) * 5 * speed_coeff;
+    if (gamepad->HasValueForAxis((Axis)Commands::move_forward.mappedAxis)) {
+        double velocity_forward = -gamepad->GetValueForAxis((Axis)Commands::move_forward.mappedAxis) * 5 * speed_coeff;
 
         control->_.parameters[geo::Forward].value = velocity_forward;
         control->_.parameters[geo::Forward].type  = motion::ControlType::Velocity;
@@ -268,8 +274,8 @@ void Application::ProcessCommands(ipc::Sender<motion::Control>* control)
         std::cout << "move_vertical" << std::endl;
         has_changes = true;
     }
-    if (gamepad->HasValueForAxis(move_right.mappedAxis)) {
-        double velocity_yaw = gamepad->GetValueForAxis((Axis)move_right.mappedAxis) * 5 * speed_coeff;
+    if (gamepad->HasValueForAxis((Axis)Commands::move_right.mappedAxis)) {
+        double velocity_yaw = gamepad->GetValueForAxis((Axis)Commands::move_right.mappedAxis) * 5 * speed_coeff;
 
         control->_.parameters[geo::Yaw].value = velocity_yaw;
         control->_.parameters[geo::Yaw].type  = motion::ControlType::Velocity;
@@ -278,7 +284,7 @@ void Application::ProcessCommands(ipc::Sender<motion::Control>* control)
         std::cout << "move_horizontal" << std::endl;
         has_changes = true;
     }
-    if (gamepad->WasKeyPressed(set_zero_speed.mappedKey)) {
+    if (gamepad->WasKeyPressed(Commands::set_zero_speed.mappedKey)) {
         has_changes = true;
         fillDefault(control);
     }

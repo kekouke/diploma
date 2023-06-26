@@ -3,8 +3,6 @@
 
 #include <SDL2/SDL.h>
 
-#include <functional>
-
 struct KeyCommand {
     SDL_GameControllerButton mappedKey;
 };

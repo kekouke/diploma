@@ -1,7 +1,7 @@
-TARGET = diploma
+TARGET = driver
 
 TEMPLATE = app
-CONFIG += console c++17
+CONFIG += console c++11
 CONFIG -= app_bundle # Не собирать маковский архив
 CONFIG -= qt
 CONFIG += debug
@@ -21,19 +21,23 @@ LIBS += \
     -L$${IPC_LIB_PATH}\lib -lipc
 
 SOURCES += \
+    commands.cpp \
     gamepad.cpp \
+    gamepadlogger.cpp \
     main.cpp \
     application.cpp
 
 
 HEADERS += \
     command.h \
+    commands.h \
+    gamepadlogger.h \
     messages.h \
     application.h \
     gamepad.h \
     motion.h
 
-DESTDIR = $$PWD/bin
+DESTDIR = ../../bin
 OBJECTS_DIR = $$PWD/build            # Путь объектников
 MOC_DIR = $$PWD/build                # Путь моков
 RCC_DIR = $$PWD/build                # Путь ресорцов

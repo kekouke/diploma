@@ -24,10 +24,10 @@ Gamepad::Gamepad()
 
 void Gamepad::InitializeKeys()
 {
-    int i = 0;
+    int buttonIndex = 0;
 
     for (auto& key : keys) {
-        key.Button = SDL_GameControllerButton(i++);
+        key.Button = SDL_GameControllerButton(buttonIndex++);
     }
 }
 
@@ -39,15 +39,19 @@ Gamepad::~Gamepad()
 void Gamepad::UpdateAxes()
 {
     for (int i = 0; i < Gamepad::AxisCount; i++) {
-        axes[i] = std::clamp(
-                    SDL_GameControllerGetAxis(
-                       gameController,
-                       static_cast<SDL_GameControllerAxis>(i)
-                    ) / 32767.f,
-                    -1.f,
-                    1.f
-        );
-        axes[i] = abs(axes[i]) >= DEADZONE ? axes[i] : 0.0;
+        float newValue = SDL_GameControllerGetAxis(
+           gameController,
+           static_cast<SDL_GameControllerAxis>(i)
+        ) / 32767.f;
+
+        if (newValue <= -1.0f) {
+            newValue = -1.0f;
+        }
+        else if (newValue >= 1.0f) {
+            newValue = 1.0f;
+        }
+
+        axes[i] = abs(newValue) >= DEADZONE ? newValue : 0.0;
     }
 }
 
@@ -76,7 +80,7 @@ void Gamepad::ConsumeKey(int i)
     keys[i].PreviousState = keys[i].CurrentState;
 }
 
-void Gamepad::ProcessPendingKeyEvents(ipc::Sender<Message::GamepadState>* sender)
+void Gamepad::ProcessPendingKeyEvents()
 {
    std::vector<ButtonEvent> processedQueue;
    std::vector<bool> used(Gamepad::ButtonCount);
@@ -86,7 +90,6 @@ void Gamepad::ProcessPendingKeyEvents(ipc::Sender<Message::GamepadState>* sender
            continue;
        }
        SetKeyState(key.Button, key.State);
-       sender->_.buttonStates[key.Button].isPressed = key.State;
        used[key.Button] = true;
    }
    buttonEventQueue = processedQueue;
@@ -103,4 +106,17 @@ void Gamepad::SetKeyState(int i, bool state)
 {
     keys[i].PreviousState = keys[i].CurrentState;
     keys[i].CurrentState = state;
+}
+
+double Gamepad::GetValueForAxis(Axis axis)
+{
+    int index = static_cast<int>(axis);
+    if (index < 0 || index >= axes.size()) {
+        return 0;
+    }
+    return axes[index];
+}
+
+bool Gamepad::HasValueForAxis(Axis axis) {
+    return abs(GetValueForAxis(axis)) >= DEADZONE;
 }

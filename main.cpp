@@ -6,9 +6,9 @@ int main(int argc, char *argv[])
 
     // Описание приложения
     ipc::Core::Description description;
-    description._title       = "Тест";
+    description._title       = "Джойстик";
     description._version     = "1.1";
-    description._description = "Тестовый модуль";
+    description._description = "Модуль управления джойстиком";
 
     app.Initialize(argc, argv, description);
     app.Run();

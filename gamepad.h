@@ -5,9 +5,6 @@
 #include <iostream>
 #include <algorithm>
 
-#include "messages.h"
-#include "ipc.h"
-
 struct ButtonEvent {
     SDL_GameControllerButton Button;
     bool State;
@@ -45,18 +42,14 @@ public:
     const std::vector<ButtonState>& GetKeys();
     const std::vector<double>& GetAxes();
 
-    double GetValueForAxis(Axis axis) {
-        return axes[(int)axis];
-    }
+    double GetValueForAxis(Axis axis);
 
-    bool HasValueForAxis(int i) {
-        return abs(axes[i]) >= DEADZONE;
-    }
+    bool HasValueForAxis(Axis i);
 
     void SetButtonState(SDL_GameControllerButton button, bool value);
     bool WasKeyPressed(int i);
     void ConsumeKey(int i);
-    void ProcessPendingKeyEvents(ipc::Sender<Message::GamepadState>* sender);
+    void ProcessPendingKeyEvents();
 
     bool IsAtached();
 

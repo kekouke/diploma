@@ -45,35 +45,69 @@ namespace Message {
         double  state_timer;
         double  read_timer;
         double  send_timer;
+
         ipc::Schema schema() {
             return ipc::Schema(this).title("Настройки")
-                    .add(IPC_INT(state_timer).title("Период состояния").unit("c").default_(1.0))
-                    .add(IPC_INT(read_timer).title("Период чтения данных").unit("c").default_(1.0))
-                    .add(IPC_INT(send_timer).title("Период посылки данных").unit("c").default_(0.5))
+                .add(IPC_INT(state_timer).title("Период состояния")
+                     .unit("c").default_(1.0))
+                .add(IPC_INT(read_timer).title("Период чтения данных")
+                     .unit("c").default_(1.0))
+                .add(IPC_INT(send_timer).title("Период посылки данных")
+                     .unit("c").default_(0.5));
+        }
+    };
+
+    struct CommandBinding {
+        ipc::String<15> binding;
+        ipc::String<30> title;
+
+        ipc::Schema schema() {
+            return ipc::Schema(this).title("Команда")
+                    .add(IPC_STRING(binding).title("Привязка"))
+                    .add(IPC_STRING(title).title("Заголовок"));
+        }
+    };
+
+    struct ButtonBinding {
+        CommandBinding start_control;
+        CommandBinding stop_control;
+        CommandBinding set_min_speed;
+        CommandBinding set_slow_speed;
+        CommandBinding set_max_speed;
+        CommandBinding set_zero_speed;
+
+        ipc::Schema schema() {
+            return ipc::Schema(this).title("Привязки кнопок к командам")
+                    .add(IPC_STRUCT(start_control))
+                    .add(IPC_STRUCT(stop_control))
+                    .add(IPC_STRUCT(set_min_speed))
+                    .add(IPC_STRUCT(set_slow_speed))
+                    .add(IPC_STRUCT(set_max_speed))
+                    .add(IPC_STRUCT(set_zero_speed))
+                    ;
+        }
+    };
+
+    struct AxisBinding {
+        CommandBinding move_forward;
+        CommandBinding move_right;
+
+        ipc::Schema schema() {
+            return ipc::Schema(this).title("Привязки кнопок к командам")
+                    .add(IPC_STRUCT(move_forward))
+                    .add(IPC_STRUCT(move_right))
                     ;
         }
     };
 
     struct GamepadMapping {
-        ipc::String<10> start_control;
-        ipc::String<10> stop_control;
-        ipc::String<10> set_min_speed;
-        ipc::String<10> set_slow_speed;
-        ipc::String<10> set_max_speed;
-        ipc::String<10> set_zero_speed;
-        ipc::String<10> move_forward;
-        ipc::String<10> move_right;
+        AxisBinding axis_commands;
+        ButtonBinding button_commands;
+
         ipc::Schema schema() {
-            return ipc::Schema(this).title("Привязка")
-                    .add(IPC_STRING(start_control).title("Включение управления"))
-                    .add(IPC_STRING(stop_control).title("Отключение управления"))
-                    .add(IPC_STRING(set_min_speed).title("Минимальная скорость"))
-                    .add(IPC_STRING(set_slow_speed).title("Медленная скорость"))
-                    .add(IPC_STRING(set_max_speed).title("Максимальная скорость"))
-                    .add(IPC_STRING(set_zero_speed).title("Нулевая скорость"))
-                    .add(IPC_STRING(move_forward).title("Движение прямо"))
-                    .add(IPC_STRING(move_right).title("Движение вправо"))
-                    ;
+            return ipc::Schema(this).title("Привязка кнопок к командам")
+                    .add(IPC_STRUCT(axis_commands))
+                    .add(IPC_STRUCT(button_commands));
         }
     };
 
